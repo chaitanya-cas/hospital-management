@@ -1,67 +1,76 @@
 package com.hospital.exception;
 
+import com.hospital.common.ApiErrorResponse;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     // Resource not found: HTTP 404
     @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<Map<String, Object>> handleNotFound(
+    public ResponseEntity<ApiErrorResponse> handleNotFound(
             ResourceNotFoundException exception) {
 
-        return buildResponse(
-                HttpStatus.NOT_FOUND,
+        ApiErrorResponse error = new ApiErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
                 exception.getMessage()
         );
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(error);
     }
 
-    // Invalid input: HTTP 400
+    // Invalid input or duplicate values: HTTP 400
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleBadRequest(
+    public ResponseEntity<ApiErrorResponse> handleBadRequest(
             IllegalArgumentException exception) {
 
-        return buildResponse(
-                HttpStatus.BAD_REQUEST,
+        ApiErrorResponse error = new ApiErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
                 exception.getMessage()
         );
+
+        return ResponseEntity
+                .badRequest()
+                .body(error);
     }
 
-    // Validation errors: HTTP 400
+    // DTO validation errors: HTTP 400
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(
+    public ResponseEntity<Map<String, Object>> handleValidationErrors(
             MethodArgumentNotValidException exception) {
 
-        String message = exception.getBindingResult()
-                .getFieldErrors()
-                .stream()
-                .map(error ->
-                        error.getField() + ": " + error.getDefaultMessage())
-                .collect(Collectors.joining("; "));
+        Map<String, String> fieldErrors = new HashMap<>();
 
-        return buildResponse(HttpStatus.BAD_REQUEST, message);
-    }
+        for (FieldError fieldError :
+                exception.getBindingResult().getFieldErrors()) {
 
-    private ResponseEntity<Map<String, Object>> buildResponse(
-            HttpStatus status,
-            String message) {
+            fieldErrors.put(
+                    fieldError.getField(),
+                    fieldError.getDefaultMessage()
+            );
+        }
 
-        Map<String, Object> body = new LinkedHashMap<>();
+        Map<String, Object> response = new HashMap<>();
 
-        body.put("timestamp", LocalDateTime.now());
-        body.put("status", status.value());
-        body.put("error", status.getReasonPhrase());
-        body.put("message", message);
+        response.put("status", HttpStatus.BAD_REQUEST.value());
+        response.put("message", "Validation failed");
+        response.put("errors", fieldErrors);
 
-        return ResponseEntity.status(status).body(body);
+        return ResponseEntity
+                .badRequest()
+                .body(response);
     }
 }
